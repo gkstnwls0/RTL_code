@@ -29,7 +29,7 @@
 `define OP_LT   3  // <
 `define OP_LTE  4  // <=
 
-module FP32_cmp(
+module FP32_cmp #(parameter output_buffering_on = "ON") (
     input                             clk,
     input                             rstn, 
     // Input Signals
@@ -38,8 +38,8 @@ module FP32_cmp(
     input [`FP32_K_WIDTH-1:0]         i_a,
     input [`FP32_K_WIDTH-1:0]         i_b,
     // Output Signals
-    output wire                       o_result_valid,
-    output wire                       o_result,
+    output wire                       o_res_valid,
+    output wire                       o_res,
     output wire                       o_nan_err
 );
 
@@ -55,9 +55,12 @@ module FP32_cmp(
     wire                              isBigA;             // is A bigger then B?
     wire                              isEQ;               // is A equal to B?
 
-    reg                               result, result_nxt;
-    reg                               result_valid, result_valid_nxt;
-    reg                               nan_err, nan_err_nxt;
+     reg                              res_p, res_p_nxt;
+    reg                               res_p_valid, res_p_valid_nxt;
+    reg                               nan_err_p, nan_err_p_nxt;
+    reg                               res_c;
+    reg                               res_c_valid;
+    reg                               nan_err_c;
     
      // unpacking for A and B
     assign a_sign = (i_valid == 1) ? i_a[`FP32_E_WIDTH+`FP32_M_WIDTH+:1] : 0;
@@ -68,69 +71,93 @@ module FP32_cmp(
     assign b_exp  = (i_valid == 1) ? i_b[`FP32_M_WIDTH+:`FP32_E_WIDTH]   : {`FP32_E_WIDTH{1'b0}};
     assign b_mant = (i_valid == 1) ? i_b[0+:`FP32_M_WIDTH]               : {`FP32_M_WIDTH{1'b0}};
 
-    /*==================================================================================*/
-    // Compare Exponents/Mantissa
-    /*==================================================================================*/
+    // Compare Sign/Exponents/Mantissa
     assign signDiff       = (a_sign == b_sign) ? 0 : 1;
     assign expDiff        = {1'b0,a_exp}  + {1'b1,~b_exp}  + 1; 
     assign mantDiff       = {1'b0,a_mant} + {1'b1,~b_mant} + 1; 
     assign expDiffisZero  = ~(|expDiff);
     assign mantDiffisZero = ~(|mantDiff);
 
+    // MAX or MIN or EQUAL
     assign isAbsBigA   = expDiffisZero   ? ~mantDiff[`FP32_M_WIDTH]  : ~expDiff[`FP32_E_WIDTH];    
     assign isBigA      = !signDiff       ? (a_sign ? ~isAbsBigA : isAbsBigA) :
                                            (a_sign ? 1'b0       : 1'b1     );
     assign isEQ        = (!signDiff && expDiffisZero && mantDiffisZero) ? 1 : 0;
 
-
+    //Compare and Output True or False
     always @(*) begin 
-        result_valid_nxt  = 0;
-        result_nxt  = 0;
-        nan_err_nxt = 0;
+        res_p_valid_nxt  = 0;
+        res_p_nxt  = 0;
+        nan_err_p_nxt = 0;
         if(i_valid) begin      
-            result_valid_nxt = 1'b1;
+            res_p_valid_nxt = 1'b1;
             if((&a_exp && |a_mant) || (&b_exp && |b_mant)) begin
-                nan_err_nxt   = 1'b1;                 
+                nan_err_p_nxt   = 1'b1;                 
             end else begin 
                 if(i_op == `OP_GTE) begin 
-                    if(isBigA || isEQ)   result_nxt =  1'b1;
-                    else                 result_nxt =  1'b0;
+                    if(isBigA || isEQ)   res_p_nxt = 1'b1;
+                    else                 res_p_nxt = 1'b0;
                 end else if(i_op == `OP_GT)begin 
-                    if(isBigA && !isEQ)  result_nxt =  1'b1;
-                    else                 result_nxt =  1'b0;
+                    if(isBigA && !isEQ)  res_p_nxt = 1'b1;
+                    else                 res_p_nxt = 1'b0;
                 end else if(i_op == `OP_EQ) begin
-                    if(isEQ)             result_nxt =  1'b1;
-                    else                 result_nxt =  1'b0;
+                    if(isEQ)             res_p_nxt = 1'b1;
+                    else                 res_p_nxt = 1'b0;
                 end else if(i_op == `OP_LT) begin
-                    if(!isBigA && !isEQ) result_nxt =  1'b1;
-                    else                 result_nxt =  1'b0;
+                    if(!isBigA && !isEQ) res_p_nxt = 1'b1;
+                    else                 res_p_nxt = 1'b0;
                 end else begin
-                     if(!isBigA || isEQ) result_nxt =  1'b1;
-                    else                 result_nxt =  1'b0;
+                     if(!isBigA || isEQ) res_p_nxt = 1'b1;
+                    else                 res_p_nxt = 1'b0;
                 end
             end           
         end 
     end    
 
+    // Intermediate values buffering for pipelining   
     always @(posedge clk or negedge rstn) begin
         if(!rstn) begin     
-            result_valid  <= 0;                 
-            result        <= 0;     
-            nan_err       <= 0;        
+            res_p_valid  <= 0;                 
+            res_p        <= 0;     
+            nan_err_p    <= 0;        
         end
         else begin 
-            result_valid  <= result_valid_nxt;   
-            if(result_valid_nxt) begin 
-                result  <= result_nxt;             
-                nan_err <= nan_err_nxt;
+            res_p_valid   <= res_p_valid_nxt;   
+            if(res_p_valid_nxt) begin 
+                res_p     <= res_p_nxt;             
+                nan_err_p <= nan_err_p_nxt;
             end
         end
     end  
+ generate 
+        if(output_buffering_on == "ON") begin : OUTPUT_BUFFERING_ON 
+            always @(posedge clk or negedge rstn) begin
+                if(!rstn) begin
+                    res_c        <= 0;
+                    res_c_valid  <= 0;
+                    nan_err_c    <= 0;
+                end
+                else begin                     
+                    res_c_valid   <= res_p_valid;
+                    if(res_p_valid) begin 
+                        res_c     <= res_p;
+                        nan_err_c <= nan_err_p;
+                    end
+                end    
+            end // : OUTPUT_BUFFERING_ON   
+        end else begin : OUTPUT_BUFFERING_OFF
+            always @(*) begin
+                res_c        = res_p;
+                res_c_valid  = res_p_valid;
+                nan_err_c    = nan_err_p; 
+            end    
+        end// : OUTPUT_BUFFERING_OFF 
+    endgenerate
 
 
-    assign o_result_valid   = result_valid;
-    assign o_result         = result;
-    assign o_nan_err        = nan_err;
+    assign o_res_valid = res_c_valid;
+    assign o_res       = res_c;
+    assign o_nan_err   = nan_err_c;
 
 
 endmodule

@@ -34,19 +34,14 @@ module INTtoFP32(
     wire                      is_zero;
     wire [`FP32_E_WIDTH-1:0]  tmp_exp;
     wire [`FP32_M_WIDTH-1:0]  tmp_man;
+    wire [MSB_IDX_WIDTH-1:0]  msb_idx;
+    wire                      msb_idx_valid;
 
     reg                       fp32_sign;
     reg [`FP32_E_WIDTH-1:0]   fp32_exp;
     reg [`FP32_M_WIDTH-1:0]   fp32_man;
-    reg [MSB_IDX_WIDTH-1:0]   msb_idx;
 
-    integer j;
-    always @(*) begin 
-         msb_idx = 0;
-        for(j=0;j<`DATA_WIDTH;j=j+1) begin 
-            if(INT[j] == 1)  msb_idx = j; 
-        end
-    end     
+    lzd_32b u_lzd(INT, msb_idx, msb_idx_valid);      
 
     assign is_zero = (INT == 0) ? 1 : 0;
     assign tmp_exp = 127 + msb_idx;
@@ -54,8 +49,8 @@ module INTtoFP32(
 
     always @(*) begin 
         fp32_sign = 1'b0;
-        fp32_exp = 8'h0;
-        fp32_man = 23'h0;
+        fp32_exp  = 0;
+        fp32_man  = 0;
         if(!is_zero) begin 
             fp32_exp = tmp_exp;
             fp32_man = tmp_man;

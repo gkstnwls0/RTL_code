@@ -19,65 +19,212 @@
 // 
 //////////////////////////////////////////////////////////////////////////////////
 
+`define OP_GTE  0  // >=
+`define OP_GT   1  // >
+`define OP_EQ   2  // =
+`define OP_LT   3  // <
+`define OP_LTE  4  // <=
+
+`define MAX  1
+`define MIN  0
 
 module tb_test();
     logic           clk;
     logic           reset_n;
+
     logic           is_max;
     logic [2:0]     is_op;
     logic [31 : 0]  in_int_a;
     logic [31 : 0]  in_int_b;
     logic [31 : 0]  fp32_a;
     logic [31 : 0]  fp32_b;
+
     logic           result_fp32_valid;
     logic [31 : 0]  result_fp32;
-    logic           result_valid;
-    logic           result;
+    logic           result_cmp_valid;
+    logic           result_cmp;
     logic           nan_err;
 
+    shortreal a, b;
 
-    INTtoFP32 INT2FP32_1(in_int_a, fp32_a);
-    INTtoFP32 INT2FP32_2(in_int_b, fp32_b);
 
-    FP32_cmp_value FP32_cmp_value_u0(clk, reset_n, 1'b1, is_max, fp32_a, fp32_b, result_fp32_valid, result_fp32);
+     INTtoFP32 INTtoFP32_u0(
+        .INT    (in_int_a), 
+        .FP32   (fp32_a)
+    );
 
-    FP32_cmp UFP32_cmp_u0(clk, reset_n, 1'b1, is_op, fp32_a, fp32_b, result_valid, result, nan_err);
+    INTtoFP32 INTtoFP32_u1(
+        .INT    (in_int_b), 
+        .FP32   (fp32_b)
+    );
 
+    FP32_cmp #(.output_buffering_on("ON"))
+    FP32_cmp_u0(
+        .clk            (clk), 
+        .rstn           (reset_n), 
+        .i_valid        (1'b1), 
+        .i_op           (is_op), 
+        .i_a            (fp32_a), 
+        .i_b            (fp32_b), 
+        .o_res_valid    (result_cmp_valid), 
+        .o_res          (result_cmp),
+        .o_nan_err      (nan_err)
+    );
+
+    FP32_cmp_value #(.output_buffering_on("ON"))
+    FP32_cmp_value_u0(
+        .clk            (clk), 
+        .rstn           (reset_n), 
+        .i_valid        (1'b1), 
+        .i_is_max       (is_max), 
+        .i_a            (fp32_a), 
+        .i_b            (fp32_b), 
+        .o_res_valid    (result_fp32_valid), 
+        .o_res          (result_fp32)
+    );
+
+    //**************************************************************************//
+    // Reset Generation
+    //**************************************************************************//   
     initial begin
         reset_n = 1'b0;
         #1000;
         reset_n = 1'b1;
 
-     end
+    end
    
      //**************************************************************************//
      // Clock Generation
      //**************************************************************************//
    
-     initial
+    initial
         clk = 1'b0;
-     always
+    always
         clk = #20 ~clk;   
 
-    initial begin 
-        in_int_a = 16;
-        in_int_b = -17;
-        is_max = 1;
-        is_op = 0;
+   initial begin 
+        in_int_a = $random;
+        in_int_b = $random;
+        is_max = `MAX;
+        is_op = `OP_GTE;
 
         #2000;
-        is_max = 0;
-        is_op = 1;
-
-
-        #2000;
-        is_op = 2;
+        in_int_a = -27;
+        in_int_b = -27;
 
         #2000;
-        is_op = 3;
+        in_int_a = $random;
+        in_int_b = $random;
+        is_max = `MAX;
+        is_op = `OP_GT;
 
         #2000;
-        is_op = 4;
+        in_int_a = -27;
+        in_int_b = -27;
+
+        #2000;
+        in_int_a = $random;
+        in_int_b = $random;
+        is_max = `MAX;
+        is_op = `OP_EQ;
+
+        #2000;
+        in_int_a = 0;
+        in_int_b = 0;
+
+        #2000;
+        in_int_a = $random;
+        in_int_b = $random;
+        is_max = `MIN;
+        is_op = `OP_LT;
+
+        #2000;
+        in_int_a = -27;
+        in_int_b = -27;
+
+        #2000;
+        in_int_a = $random;
+        in_int_b = $random;
+        is_max = `MIN;
+        is_op = `OP_LTE;
+
+        #2000;
+        in_int_a = -27;
+        in_int_b = -27;
+
+
+
+        //negative test
+        // a = -($random);
+        // b = -($random);
+        // fp32_a = $shortrealtobits(a);
+        // fp32_b = $shortrealtobits(b);
+        // is_max = `MAX;
+        // is_op = `OP_GTE;
+
+        // #2000;
+        // a = -17.0;
+        // b = -17.0;
+        // fp32_a = $shortrealtobits(a);
+        // fp32_b = $shortrealtobits(b);
+
+        // #2000;
+        // a = -($random);
+        // b = -($random);
+        // fp32_a = $shortrealtobits(a);
+        // fp32_b = $shortrealtobits(b);
+        // is_max = `MAX;
+        // is_op = `OP_GT;
+
+        // #2000;
+        // a = -17.0;
+        // b = -17.0;
+        // fp32_a = $shortrealtobits(a);
+        // fp32_b = $shortrealtobits(b);
+
+        // #2000;
+        // a = -($random);
+        // b = -($random);
+        // fp32_a = $shortrealtobits(a);
+        // fp32_b = $shortrealtobits(b);
+        // is_max = `MAX;
+        // is_op = `OP_EQ;
+
+        // #2000;
+        // a = -17.0;
+        // b = -17.0;
+        // fp32_a = $shortrealtobits(a);
+        // fp32_b = $shortrealtobits(b);
+
+
+        // #2000;
+        // a = -($random);
+        // b = -($random);
+        // fp32_a = $shortrealtobits(a);
+        // fp32_b = $shortrealtobits(b);
+        // is_max = `MIN;
+        // is_op = `OP_LT;
+
+        // #2000;
+        // a = -17.0;
+        // b = -17.0;
+        // fp32_a = $shortrealtobits(a);
+        // fp32_b = $shortrealtobits(b);
+
+        // #2000;
+        // a = -($random);
+        // b = -($random);
+        // fp32_a = $shortrealtobits(a);
+        // fp32_b = $shortrealtobits(b);
+        // is_max = `MIN;
+        // is_op = `OP_LTE;
+
+        // #2000;
+        // a = -17.0;
+        // b = -17.0;
+        // fp32_a = $shortrealtobits(a);
+        // fp32_b = $shortrealtobits(b);
+       
 
         #2000;
          $stop;
