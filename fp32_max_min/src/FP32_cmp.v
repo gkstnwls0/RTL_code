@@ -87,9 +87,9 @@ module FP32_cmp (
     assign a_exp  = (valid_buf == 1) ? a_buf[`FP32_M_WIDTH+:`FP32_E_WIDTH]   : {`FP32_E_WIDTH{1'b0}};
     assign a_mant = (valid_buf == 1) ? a_buf[0+:`FP32_M_WIDTH]               : {`FP32_M_WIDTH{1'b0}};
 
-    assign b_sign = (valid_buf == 1) ? a_buf[`FP32_E_WIDTH+`FP32_M_WIDTH+:1] : 0;
-    assign b_exp  = (valid_buf == 1) ? a_buf[`FP32_M_WIDTH+:`FP32_E_WIDTH]   : {`FP32_E_WIDTH{1'b0}};
-    assign b_mant = (valid_buf == 1) ? a_buf[0+:`FP32_M_WIDTH]               : {`FP32_M_WIDTH{1'b0}};
+    assign b_sign = (valid_buf == 1) ? b_buf[`FP32_E_WIDTH+`FP32_M_WIDTH+:1] : 0;
+    assign b_exp  = (valid_buf == 1) ? b_buf[`FP32_M_WIDTH+:`FP32_E_WIDTH]   : {`FP32_E_WIDTH{1'b0}};
+    assign b_mant = (valid_buf == 1) ? b_buf[0+:`FP32_M_WIDTH]               : {`FP32_M_WIDTH{1'b0}};
 
     // Compare Sign/Exponents/Mantissa
     assign signDiff       = (a_sign == b_sign) ? 0 : 1;

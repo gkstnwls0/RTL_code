@@ -104,8 +104,8 @@ module FP32_cmp_value (
                     if(isBigA) res_p_nxt = a_buf;
                     else       res_p_nxt = b_buf;
                 end else begin 
-                    if(isBigA) res_p_nxt = a_buf;
-                    else       res_p_nxt = b_buf;
+                    if(isBigA) res_p_nxt = b_buf;
+                    else       res_p_nxt = a_buf;
                 end
             end           
         end 
