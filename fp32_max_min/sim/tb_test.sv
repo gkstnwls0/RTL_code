@@ -58,8 +58,7 @@ module tb_test();
         .FP32   (fp32_b)
     );
 
-    FP32_cmp #(.output_buffering_on("ON"))
-    FP32_cmp_u0(
+    FP32_cmp FP32_cmp_u0(
         .clk            (clk), 
         .rstn           (reset_n), 
         .i_valid        (1'b1), 
@@ -71,8 +70,7 @@ module tb_test();
         .o_nan_err      (nan_err)
     );
 
-    FP32_cmp_value #(.output_buffering_on("ON"))
-    FP32_cmp_value_u0(
+    FP32_cmp_value FP32_cmp_value_u0(
         .clk            (clk), 
         .rstn           (reset_n), 
         .i_valid        (1'b1), 

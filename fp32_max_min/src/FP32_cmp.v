@@ -29,7 +29,7 @@
 `define OP_LT   3  // <
 `define OP_LTE  4  // <=
 
-module FP32_cmp #(parameter output_buffering_on = "ON") (
+module FP32_cmp (
     input                             clk,
     input                             rstn, 
     // Input Signals
@@ -55,21 +55,41 @@ module FP32_cmp #(parameter output_buffering_on = "ON") (
     wire                              isBigA;             // is A bigger then B?
     wire                              isEQ;               // is A equal to B?
 
-     reg                              res_p, res_p_nxt;
-    reg                               res_p_valid, res_p_valid_nxt;
-    reg                               nan_err_p, nan_err_p_nxt;
-    reg                               res_c;
-    reg                               res_c_valid;
-    reg                               nan_err_c;
+    //input reg
+    reg                               valid_buf;
+    reg [2:0]                         op_buf;
+    reg [`FP32_K_WIDTH-1:0]           a_buf;
+    reg [`FP32_K_WIDTH-1:0]           b_buf;
+    
+    //output reg
+    reg                               res_p           ,res_p_nxt;
+    reg                               res_p_valid     ,res_p_valid_nxt;
+    reg                               nan_err_p       ,nan_err_p_nxt;
+
+    //Input Buffering
+    always @(posedge clk or negedge rstn) begin
+        if(!rstn) begin     
+            valid_buf  <= 0;                 
+            op_buf     <= 0;     
+            a_buf      <= 0;   
+            b_buf      <= 0;      
+        end
+        else begin 
+            valid_buf  <= i_valid;                 
+            op_buf     <= i_op;     
+            a_buf      <= i_a;   
+            b_buf      <= i_b;  
+        end
+    end  
     
      // unpacking for A and B
-    assign a_sign = (i_valid == 1) ? i_a[`FP32_E_WIDTH+`FP32_M_WIDTH+:1] : 0;
-    assign a_exp  = (i_valid == 1) ? i_a[`FP32_M_WIDTH+:`FP32_E_WIDTH]   : {`FP32_E_WIDTH{1'b0}};
-    assign a_mant = (i_valid == 1) ? i_a[0+:`FP32_M_WIDTH]               : {`FP32_M_WIDTH{1'b0}};
+    assign a_sign = (valid_buf == 1) ? a_buf[`FP32_E_WIDTH+`FP32_M_WIDTH+:1] : 0;
+    assign a_exp  = (valid_buf == 1) ? a_buf[`FP32_M_WIDTH+:`FP32_E_WIDTH]   : {`FP32_E_WIDTH{1'b0}};
+    assign a_mant = (valid_buf == 1) ? a_buf[0+:`FP32_M_WIDTH]               : {`FP32_M_WIDTH{1'b0}};
 
-    assign b_sign = (i_valid == 1) ? i_b[`FP32_E_WIDTH+`FP32_M_WIDTH+:1] : 0;
-    assign b_exp  = (i_valid == 1) ? i_b[`FP32_M_WIDTH+:`FP32_E_WIDTH]   : {`FP32_E_WIDTH{1'b0}};
-    assign b_mant = (i_valid == 1) ? i_b[0+:`FP32_M_WIDTH]               : {`FP32_M_WIDTH{1'b0}};
+    assign b_sign = (valid_buf == 1) ? a_buf[`FP32_E_WIDTH+`FP32_M_WIDTH+:1] : 0;
+    assign b_exp  = (valid_buf == 1) ? a_buf[`FP32_M_WIDTH+:`FP32_E_WIDTH]   : {`FP32_E_WIDTH{1'b0}};
+    assign b_mant = (valid_buf == 1) ? a_buf[0+:`FP32_M_WIDTH]               : {`FP32_M_WIDTH{1'b0}};
 
     // Compare Sign/Exponents/Mantissa
     assign signDiff       = (a_sign == b_sign) ? 0 : 1;
@@ -89,21 +109,21 @@ module FP32_cmp #(parameter output_buffering_on = "ON") (
         res_p_valid_nxt  = 0;
         res_p_nxt  = 0;
         nan_err_p_nxt = 0;
-        if(i_valid) begin      
+        if(valid_buf) begin      
             res_p_valid_nxt = 1'b1;
             if((&a_exp && |a_mant) || (&b_exp && |b_mant)) begin
                 nan_err_p_nxt   = 1'b1;                 
             end else begin 
-                if(i_op == `OP_GTE) begin 
+                if(op_buf == `OP_GTE) begin 
                     if(isBigA || isEQ)   res_p_nxt = 1'b1;
                     else                 res_p_nxt = 1'b0;
-                end else if(i_op == `OP_GT)begin 
+                end else if(op_buf == `OP_GT)begin 
                     if(isBigA && !isEQ)  res_p_nxt = 1'b1;
                     else                 res_p_nxt = 1'b0;
-                end else if(i_op == `OP_EQ) begin
+                end else if(op_buf == `OP_EQ) begin
                     if(isEQ)             res_p_nxt = 1'b1;
                     else                 res_p_nxt = 1'b0;
-                end else if(i_op == `OP_LT) begin
+                end else if(op_buf == `OP_LT) begin
                     if(!isBigA && !isEQ) res_p_nxt = 1'b1;
                     else                 res_p_nxt = 1'b0;
                 end else begin
@@ -114,7 +134,7 @@ module FP32_cmp #(parameter output_buffering_on = "ON") (
         end 
     end    
 
-    // Intermediate values buffering for pipelining   
+    // Output buffering  
     always @(posedge clk or negedge rstn) begin
         if(!rstn) begin     
             res_p_valid  <= 0;                 
@@ -129,35 +149,10 @@ module FP32_cmp #(parameter output_buffering_on = "ON") (
             end
         end
     end  
- generate 
-        if(output_buffering_on == "ON") begin : OUTPUT_BUFFERING_ON 
-            always @(posedge clk or negedge rstn) begin
-                if(!rstn) begin
-                    res_c        <= 0;
-                    res_c_valid  <= 0;
-                    nan_err_c    <= 0;
-                end
-                else begin                     
-                    res_c_valid   <= res_p_valid;
-                    if(res_p_valid) begin 
-                        res_c     <= res_p;
-                        nan_err_c <= nan_err_p;
-                    end
-                end    
-            end // : OUTPUT_BUFFERING_ON   
-        end else begin : OUTPUT_BUFFERING_OFF
-            always @(*) begin
-                res_c        = res_p;
-                res_c_valid  = res_p_valid;
-                nan_err_c    = nan_err_p; 
-            end    
-        end// : OUTPUT_BUFFERING_OFF 
-    endgenerate
 
-
-    assign o_res_valid = res_c_valid;
-    assign o_res       = res_c;
-    assign o_nan_err   = nan_err_c;
+    assign o_res_valid = res_p_valid;
+    assign o_res       = res_p;
+    assign o_nan_err   = nan_err_p;
 
 
 endmodule

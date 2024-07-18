@@ -23,7 +23,7 @@
 `define FP32_M_WIDTH 23
 `define QNNN 'hFFFFFFFF
 
-module FP32_cmp_value #(parameter output_buffering_on = "ON")  (
+module FP32_cmp_value (
     //  common signal
     input                             clk,
     input                             rstn, 
@@ -46,19 +46,41 @@ module FP32_cmp_value #(parameter output_buffering_on = "ON")  (
     wire                              isAbsBigA;          // is A is bigger then B? (Absolute)
     wire                              isBigA;             // is A is bigger then B?
 
+    //input reg
+    reg                               valid_buf;
+    reg                               is_max_buf;
+    reg [`FP32_K_WIDTH-1:0]           a_buf;
+    reg [`FP32_K_WIDTH-1:0]           b_buf;
+
+    //output reg
     reg  [`FP32_K_WIDTH-1:0]          res_p, res_p_nxt;
     reg                               res_p_valid, res_p_valid_nxt;
-    reg  [`FP32_K_WIDTH-1:0]          res_c;
-    reg                               res_c_valid;
+
+    // Input Buffering
+    always @(posedge clk or negedge rstn) begin
+        if(!rstn) begin     
+            valid_buf  <= 0;                 
+            is_max_buf <= 0;     
+            a_buf      <= 0;   
+            b_buf      <= 0;      
+        end
+        else begin 
+            valid_buf  <= i_valid;                 
+            is_max_buf <= i_is_max;     
+            a_buf      <= i_a;   
+            b_buf      <= i_b;  
+        end
+    end  
+
 
     // unpacking for FP32 A and B
-    assign a_sign = (i_valid == 1) ? i_a[`FP32_E_WIDTH+`FP32_M_WIDTH+:1] : 0;
-    assign a_exp  = (i_valid == 1) ? i_a[`FP32_M_WIDTH+:`FP32_E_WIDTH]   : {`FP32_E_WIDTH{1'b0}};
-    assign a_mant = (i_valid == 1) ? i_a[0+:`FP32_M_WIDTH]               : {`FP32_M_WIDTH{1'b0}};
+    assign a_sign = (valid_buf == 1) ? a_buf[`FP32_E_WIDTH+`FP32_M_WIDTH+:1] : 0;
+    assign a_exp  = (valid_buf == 1) ? a_buf[`FP32_M_WIDTH+:`FP32_E_WIDTH]   : {`FP32_E_WIDTH{1'b0}};
+    assign a_mant = (valid_buf == 1) ? a_buf[0+:`FP32_M_WIDTH]               : {`FP32_M_WIDTH{1'b0}};
 
-    assign b_sign = (i_valid == 1) ? i_b[`FP32_E_WIDTH+`FP32_M_WIDTH+:1] : 0;
-    assign b_exp  = (i_valid == 1) ? i_b[`FP32_M_WIDTH+:`FP32_E_WIDTH]   : {`FP32_E_WIDTH{1'b0}};
-    assign b_mant = (i_valid == 1) ? i_b[0+:`FP32_M_WIDTH]               : {`FP32_M_WIDTH{1'b0}};
+    assign b_sign = (valid_buf == 1) ? b_buf[`FP32_E_WIDTH+`FP32_M_WIDTH+:1] : 0;
+    assign b_exp  = (valid_buf == 1) ? b_buf[`FP32_M_WIDTH+:`FP32_E_WIDTH]   : {`FP32_E_WIDTH{1'b0}};
+    assign b_mant = (valid_buf == 1) ? b_buf[0+:`FP32_M_WIDTH]               : {`FP32_M_WIDTH{1'b0}};
 
     // Compare Exponents/Mantissa
     assign expDiff        = {1'b0,a_exp}  + {1'b1,~b_exp}  + 1; 
@@ -73,22 +95,23 @@ module FP32_cmp_value #(parameter output_buffering_on = "ON")  (
     always @(*) begin 
         res_p_valid_nxt  = 0;
         res_p_nxt  = 0;
-        if(i_valid) begin      
+        if(valid_buf) begin      
             res_p_valid_nxt = 1'b1;
             if((&a_exp && |a_mant) || (&b_exp && |b_mant)) begin
                 res_p_nxt   = `QNNN;                 
             end else begin 
-                if(i_is_max) begin 
-                    if(isBigA) res_p_nxt = i_a;
-                    else       res_p_nxt = i_b;
+                if(is_max_buf) begin 
+                    if(isBigA) res_p_nxt = a_buf;
+                    else       res_p_nxt = b_buf;
                 end else begin 
-                    if(isBigA) res_p_nxt = i_b;
-                    else       res_p_nxt = i_a;
+                    if(isBigA) res_p_nxt = a_buf;
+                    else       res_p_nxt = b_buf;
                 end
             end           
         end 
     end    
-                                                 
+
+    // Output buffering                                     
     always @(posedge clk or negedge rstn) begin
         if(!rstn) begin     
             res_p_valid <= 0;                 
@@ -101,28 +124,8 @@ module FP32_cmp_value #(parameter output_buffering_on = "ON")  (
         end
     end  
 
-    generate 
-        if(output_buffering_on == "ON") begin : OUTPUT_BUFFERING_ON 
-            always @(posedge clk or negedge rstn) begin
-                if(!rstn) begin
-                    res_c          <= 0;
-                    res_c_valid    <= 0;
-                end
-                else begin                     
-                    res_c_valid           <= res_p_valid;
-                    if(res_p_valid) res_c <= res_p;
-                end    
-            end // : OUTPUT_BUFFERING_ON   
-        end else begin : OUTPUT_BUFFERING_OFF
-            always @(*) begin
-                res_c        = res_p;
-                res_c_valid  = res_p_valid; 
-            end    
-        end// : OUTPUT_BUFFERING_OFF 
-    endgenerate
-
-    assign o_res_valid  = res_c_valid;
-    assign o_res        = res_c;
+    assign o_res_valid  = res_p_valid;
+    assign o_res        = res_p;
 
 
      
